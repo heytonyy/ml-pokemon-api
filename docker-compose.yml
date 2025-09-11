@@ -1,0 +1,42 @@
+services:
+  pokemon-api:
+    build: 
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "5050:5050"
+    volumes:
+      # Mount models directory to persist model files
+      - ./models:/app/models
+      # Mount uploads directory for temporary file uploads
+      - ./uploads:/app/uploads
+    environment:
+      - FLASK_ENV=production
+      - MODEL_PATH=/app/models/pokemon_v1.pth
+      - CLASS_MAPPING_PATH=/app/models/class_mapping.json
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5050/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  # Optional: Add Redis for caching predictions
+  # redis:
+  #   image: redis:7-alpine
+  #   ports:
+  #     - "6379:6379"
+  #   restart: unless-stopped
+
+  # Optional: Add nginx as reverse proxy
+  # nginx:
+  #   image: nginx:alpine
+  #   ports:
+  #     - "80:80"
+  #     - "443:443"
+  #   volumes:
+  #     - ./nginx.conf:/etc/nginx/nginx.conf
+  #   depends_on:
+  #     - pokemon-api
+  #   restart: unless-stopped

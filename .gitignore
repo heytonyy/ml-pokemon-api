@@ -1,0 +1,15 @@
+# Model
+/models
+
+# Images
+/uploads
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+venv/
+.env
+
+# MacOS
+.DS_Store
