@@ -1,20 +1,38 @@
-from flask import Blueprint, request, jsonify, current_app as app
+from flask import Blueprint, request, jsonify
 from blueprints.pokemon_classifier.model import PokemonClassifier
-from werkzeug.utils import secure_filename
+from PIL import Image, UnidentifiedImageError
+from io import BytesIO
 import os
+import logging
 import requests
-from urllib.parse import urlparse
+
+logger = logging.getLogger(__name__)
 
 # Flask Blueprint for the API
 pokemon_classifier = Blueprint('pokemon_classifier', __name__)
 
+MODEL_PATH = os.environ.get('MODEL_PATH', 'models/pokemon_v1.pth')
+CLASS_MAPPING_PATH = os.environ.get('CLASS_MAPPING_PATH', 'models/class_mapping.json')
+# Hugging Face model repo holding the weights, e.g. "heytonyy/pokemon-classifier".
+# Used to download the files when they aren't on disk (they're too big for git).
+HF_MODEL_REPO = os.environ.get('HF_MODEL_REPO')
+
+
+def _ensure_local(path: str) -> str:
+    if os.path.exists(path) or not HF_MODEL_REPO:
+        return path
+    from huggingface_hub import hf_hub_download
+    logger.info(f"Downloading {os.path.basename(path)} from {HF_MODEL_REPO}")
+    return hf_hub_download(repo_id=HF_MODEL_REPO, filename=os.path.basename(path))
+
+
 # Initialize the classifier [change: pass it in from the main app?]
 classifier = PokemonClassifier(
-    model_path="models/pokemon_v1.pth",
-    class_mapping_path="models/class_mapping.json"
+    model_path=_ensure_local(MODEL_PATH),
+    class_mapping_path=_ensure_local(CLASS_MAPPING_PATH)
 )
 
-ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg', 'gif', 'bmp'}
+ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg', 'gif', 'bmp', 'webp'}
 
 def allowed_file(filename):
     return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
@@ -27,48 +45,29 @@ def health_check():
 def testing():
     # Test picture of Pikachu
     url = "https://i.pinimg.com/736x/bf/95/34/bf953419d76bf747cba69b55e6e03957.jpg"
-    response = requests.get(url)
+    response = requests.get(url, timeout=10)
     response.raise_for_status()
 
-    parsed_url = urlparse(url)
-    original_filename = os.path.basename(parsed_url.path)
-    
-    filename = secure_filename(original_filename)
-    filepath = os.path.join(app.config['UPLOAD_FOLDER'], filename)
-    
-    os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
-    
-    with open(filepath, 'wb') as f:
-        f.write(response.content)
-    
-    prediction = classifier.predict(filepath, return_top_k=3)
-    os.remove(filepath)
-    return jsonify(prediction)
+    image = Image.open(BytesIO(response.content))
+    return jsonify(classifier.predict(image, return_top_k=3))
 
 @pokemon_classifier.route('/predict', methods=['POST'])
 def predict():
-    try:
-        if 'image' not in request.files:
-            return jsonify({'error': 'No image file provided'}), 400
-        
-        file = request.files['image']
-        
-        if file.filename == '' or not allowed_file(file.filename):
-            return jsonify({'error': 'Invalid file type or no file selected'}), 400
+    if 'image' not in request.files:
+        return jsonify({'error': 'No image file provided'}), 400
 
-        filename = secure_filename(file.filename)
-        filepath = os.path.join(app.config['UPLOAD_FOLDER'], filename)
-        
-        os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
-        
-        file.save(filepath)
-        
-        prediction = classifier.predict(filepath, return_top_k=3)
-        os.remove(filepath)
-    
-        return jsonify(prediction)
-        
-    except Exception as e:
-        if 'filepath' in locals() and os.path.exists(filepath):
-            os.remove(filepath)
-        return jsonify({'error': str(e)}), 500
+    file = request.files['image']
+
+    if file.filename == '' or not allowed_file(file.filename):
+        return jsonify({'error': 'Invalid file type or no file selected'}), 400
+
+    try:
+        image = Image.open(file.stream)
+    except UnidentifiedImageError:
+        return jsonify({'error': 'File is not a valid image'}), 400
+
+    try:
+        return jsonify(classifier.predict(image, return_top_k=3))
+    except Exception:
+        logger.exception("Prediction failed")
+        return jsonify({'error': 'Prediction failed'}), 500

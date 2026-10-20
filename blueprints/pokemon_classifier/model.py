@@ -21,9 +21,10 @@ logger = logging.getLogger(__name__)
 class PokemonModel(nn.Module):
     """Core Pokemon classification model using VGG16 backbone."""
     
-    def __init__(self, num_classes: int = 151):
+    def __init__(self, num_classes: int = 151, pretrained_backbone: bool = True):
         super(PokemonModel, self).__init__()
-        self.vgg16 = vgg16(weights=VGG16_Weights.DEFAULT)
+        # ImageNet weights are only useful for training; skip the ~530MB download when loading our own weights
+        self.vgg16 = vgg16(weights=VGG16_Weights.DEFAULT if pretrained_backbone else None)
         num_ftrs = self.vgg16.classifier[-1].in_features
         self.vgg16.classifier[-1] = nn.Linear(num_ftrs, num_classes)
 
@@ -73,7 +74,7 @@ class PokemonClassifier:
         """
         self.num_classes = num_classes
         self.device = self._get_device(device)
-        self.model = PokemonModel(num_classes=num_classes).to(self.device)
+        self.model = PokemonModel(num_classes=num_classes, pretrained_backbone=model_path is None).to(self.device)
         
         # Initialize transforms
         self.train_transform = self._get_train_transforms()
@@ -84,10 +85,10 @@ class PokemonClassifier:
         self.idx_to_class = {}
         
         # Load pre-trained model and class mapping if provided
-        if model_path and os.path.exists(model_path):
+        if model_path:
             self.load_model(model_path)
         
-        if class_mapping_path and os.path.exists(class_mapping_path):
+        if class_mapping_path:
             self.load_class_mapping(class_mapping_path)
     
     def _get_device(self, device: Optional[str]) -> torch.device:
@@ -159,8 +160,8 @@ class PokemonClassifier:
     def train(self, 
               train_loader: DataLoader,
               val_loader: DataLoader,
-              num_epochs: int = 5,
-              learning_rate: float = 0.001,
+              num_epochs: int = 20,
+              learning_rate: float = 0.05,
               momentum: float = 0.9,
               save_path: Optional[str] = None,
               save_best_only: bool = True) -> Dict[str, List[float]]:
@@ -427,10 +428,7 @@ def load_pretrained_model(model_path: str,
     Returns:
         Loaded PokemonClassifier instance
     """
-    model = PokemonClassifier(device=device)
-    model.load_model(model_path)
-    model.load_class_mapping(class_mapping_path)
-    return model
+    return PokemonClassifier(device=device, model_path=model_path, class_mapping_path=class_mapping_path)
 
 
 def quick_predict(model_path: str,

@@ -1,6 +1,53 @@
+---
+title: ML Pokemon API
+emoji: ⚡
+colorFrom: yellow
+colorTo: red
+sdk: gradio
+sdk_version: 6.30.0
+python_version: "3.12"
+app_file: gradio_app.py
+pinned: false
+---
+
 # Pokemon Classifier API
 
-TODO: Update this README later... general docker instructions
+The classifier runs in two ways:
+- **`gradio_app.py`**: the Gradio app deployed to a Hugging Face Space on ZeroGPU (free). The React site calls this.
+- **`app.py`**: the Flask API, for local development or Docker hosting (see below).
+
+## ☁️ Deploying to Hugging Face Spaces (ZeroGPU)
+
+The model weights (`models/`) are too large for git, so they live in the Hugging Face model repo
+[`heytony/pokemon-classifier`](https://huggingface.co/heytony/pokemon-classifier) and are downloaded when the Space starts.
+
+Free accounts can host up to 2 ZeroGPU Spaces if the email is verified and the account is older than 30 days.
+
+1. Upload the weights (one time, or whenever you retrain). `hf upload` creates the repo if it doesn't exist:
+   ```bash
+   hf auth login   # paste a token with "Write" access from https://huggingface.co/settings/tokens
+   hf upload heytony/pokemon-classifier models/pokemon_v1.pth pokemon_v1.pth
+   hf upload heytony/pokemon-classifier models/class_mapping.json class_mapping.json
+   ```
+2. Create a new Space at https://huggingface.co/new-space named `ml-pokemon-api`, with SDK **Gradio** → **Blank** template,
+   hardware **ZeroGPU**, and visibility **Public**.
+3. Upload this code to the Space (rerun to redeploy):
+   ```bash
+   hf upload heytony/ml-pokemon-api . . --repo-type=space \
+     --exclude ".venv/*" --exclude "models/*" --exclude ".git/*" --exclude "*__pycache__*" \
+     --exclude "*.DS_Store" --exclude "blueprints/pokemon_text_generation/*"
+   ```
+4. The app is at https://huggingface.co/spaces/heytony/ml-pokemon-api. The React site connects to it by Space id with `@gradio/client`.
+
+Run the Gradio app locally with `python gradio_app.py` (http://127.0.0.1:7860). It uses `models/` when present.
+
+| Env var | Default | Purpose |
+|---|---|---|
+| `HF_MODEL_REPO` | `heytony/pokemon-classifier` in `gradio_app.py`, unset in `app.py` | HF model repo to download weights from when they aren't on disk |
+| `MODEL_PATH` (Flask only) | `models/pokemon_v1.pth` | Local weights path |
+| `CLASS_MAPPING_PATH` (Flask only) | `models/class_mapping.json` | Local class mapping path |
+| `CORS_ORIGINS` (Flask only) | `https://heytonyy.github.io,http://localhost:5173` | Origins allowed to call the API |
+| `PORT` (Flask only) | `7860` in Docker, `5050` with `python app.py` | Port to listen on |
 
 ## 🐳 Quick Start With Docker
 

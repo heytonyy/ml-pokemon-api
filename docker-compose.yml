@@ -8,10 +8,8 @@ services:
     volumes:
       # Mount models directory to persist model files
       - ./models:/app/models
-      # Mount uploads directory for temporary file uploads
-      - ./uploads:/app/uploads
     environment:
-      - FLASK_ENV=production
+      - PORT=5050
       - MODEL_PATH=/app/models/pokemon_v1.pth
       - CLASS_MAPPING_PATH=/app/models/class_mapping.json
     restart: unless-stopped

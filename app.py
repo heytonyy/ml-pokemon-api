@@ -1,13 +1,16 @@
+import os
 from flask import Flask, jsonify
 from flask_cors import CORS
-from blueprints.pokemon_classifier import pokemon_classifier
+from blueprints.pokemon_classifier.routes import pokemon_classifier
+
+# Comma-separated list of origins allowed to call the API
+DEFAULT_CORS_ORIGINS = 'https://heytonyy.github.io,http://localhost:5173'
 
 def create_app():
     app = Flask(__name__)
-    CORS(app)
+    CORS(app, origins=os.environ.get('CORS_ORIGINS', DEFAULT_CORS_ORIGINS).split(','))
 
     # Configuration
-    app.config['UPLOAD_FOLDER'] = 'uploads'
     app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024  # 16MB max file size
 
     # Health check
@@ -25,4 +28,4 @@ def create_app():
 
 if __name__ == '__main__':
     app = create_app()
-    app.run(debug=True, host='0.0.0.0', port=5050)
+    app.run(debug=True, host='0.0.0.0', port=int(os.environ.get('PORT', 5050)))
