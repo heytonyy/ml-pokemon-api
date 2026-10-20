@@ -14,14 +14,21 @@ def model_file(filename: str) -> str:
     return local_path if os.path.exists(local_path) else hf_hub_download(HF_MODEL_REPO, filename)
 
 
-# ZeroGPU wants the model placed on cuda at startup; @spaces.GPU attaches a real GPU per call
+# Inference runs on the Space's CPU (~1s per image), so visitors don't use up ZeroGPU quota,
+# which is tiny for anonymous calls coming from the GitHub Pages site
 classifier = PokemonClassifier(
+    device='cpu',
     model_path=model_file('pokemon_v1.pth'),
     class_mapping_path=model_file('class_mapping.json'),
 )
 
 
-@spaces.GPU(duration=10)
+@spaces.GPU(duration=5)
+def _zerogpu_placeholder():
+    # Never called; ZeroGPU Spaces must define at least one @spaces.GPU function to start
+    pass
+
+
 def predict(image):
     if image is None:
         raise gr.Error('Please upload an image')
